@@ -3,6 +3,13 @@ name: CD
 on:
   push:
     branches: [master]
+    paths:
+      - 'csgo/cfg/**'
+      - 'csgo/addons/**'
+      - 'csgo/mapcycle.txt'
+      - 'csgo/maplist.txt'
+      - 'csgo/motd.txt'
+      - 'csgo/gamemodes_server.txt.example'
 
 jobs:
   deploy:
