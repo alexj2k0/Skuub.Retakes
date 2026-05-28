@@ -29,5 +29,5 @@ jobs:
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
           title: CD deploy
-          description: "${{ job.status == 'success' && 'Deployed to VPS and server restarted' || 'Deploy failed' }}"
+          description: "${{ job.status == 'success' && 'Deployed to VPS' || 'Deploy failed' }}"
           color: ${{ job.status == 'success' && 0x00ff00 || 0xff0000 }}
