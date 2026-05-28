@@ -2,8 +2,6 @@ name: CI
 
 on:
   pull_request:
-  push:
-    branches: [master]
 
 jobs:
   compile:
@@ -39,11 +37,3 @@ jobs:
           name: compiled-plugins
           path: csgo/addons/sourcemod/scripting/compiled/*.smx
 
-      - name: Notify Discord
-        if: github.event_name == 'push'
-        uses: sarisia/actions-status-discord@v1
-        with:
-          webhook: ${{ secrets.DISCORD_WEBHOOK }}
-          title: CI compile
-          description: "${{ job.status == 'success' && 'All plugins compiled successfully' || 'Compilation failed' }}"
-          color: ${{ job.status == 'success' && 0x00ff00 || 0xff0000 }}
