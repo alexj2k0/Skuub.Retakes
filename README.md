@@ -4,6 +4,8 @@ CS:GO Legacy community retakes server — configs, plugins, and deployment pipel
 
 Uses SourceMod + MetaMod with custom plugins for retakes, weapons/gloves, sprays, map voting, and more.
 
+This is only public for PR rules. Your PR will get instantly rejected if you are not on the Skuub.xyz dev team. 
+
 ## Contributing
 
 1. Branch off `master`, make your changes
