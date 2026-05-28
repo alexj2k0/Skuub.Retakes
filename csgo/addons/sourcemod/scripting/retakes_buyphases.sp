@@ -8,6 +8,7 @@
 #pragma newdecls required
 
 #define MENU_TIME_LENGTH 20
+#define MAX_AWP_CYCLE_LENGTH 32
 
 enum BuyPhase
 {
@@ -90,12 +91,20 @@ int g_Clutches[MAXPLAYERS + 1];
 ConVar g_FreezetimeCvar;
 ConVar g_PistolRoundsCvar;
 ConVar g_ForceRoundsCvar;
+ConVar g_AwpCycleLengthCvar;
+ConVar g_AwpCycleEnabledRoundsCvar;
+
+bool g_AwpCycle[MAX_AWP_CYCLE_LENGTH];
+int g_AwpCycleBlock = -1;
+int g_AwpCycleLength = 0;
+int g_AwpCycleEnabledRounds = 0;
 
 Handle g_PistolCookie = INVALID_HANDLE;
 Handle g_ForceCookie = INVALID_HANDLE;
 Handle g_FullPrimaryCookie = INVALID_HANDLE;
 Handle g_FullSidearmCookie = INVALID_HANDLE;
 Handle g_LoadoutPromptCookie = INVALID_HANDLE;
+Handle g_LegacyM4ChoiceCookie = INVALID_HANDLE;
 
 public Plugin myinfo =
 {
@@ -111,12 +120,15 @@ public void OnPluginStart()
     g_FreezetimeCvar = CreateConVar("sm_retakes_buy_freezetime", "3", "Retake freeze time in seconds.", _, true, 1.0);
     g_PistolRoundsCvar = CreateConVar("sm_retakes_buy_pistol_rounds", "2", "Number of opening retake rounds using pistol loadouts.", _, true, 0.0);
     g_ForceRoundsCvar = CreateConVar("sm_retakes_buy_force_rounds", "3", "Number of retake rounds after pistol rounds using force loadouts.", _, true, 0.0);
+    g_AwpCycleLengthCvar = CreateConVar("sm_retakes_buy_awp_cycle_length", "5", "Number of full-buy rounds in each shuffled AWP availability cycle.", _, true, 1.0, true, float(MAX_AWP_CYCLE_LENGTH));
+    g_AwpCycleEnabledRoundsCvar = CreateConVar("sm_retakes_buy_awp_cycle_enabled_rounds", "3", "Number of AWP-enabled rounds in each full-buy AWP cycle.", _, true, 0.0, true, float(MAX_AWP_CYCLE_LENGTH));
 
     g_PistolCookie = RegClientCookie("retakes_loadout_pistol", "Retakes pistol loadout", CookieAccess_Private);
     g_ForceCookie = RegClientCookie("retakes_loadout_force", "Retakes force loadout", CookieAccess_Private);
     g_FullPrimaryCookie = RegClientCookie("retakes_loadout_full_primary", "Retakes full-buy primary loadout", CookieAccess_Private);
     g_FullSidearmCookie = RegClientCookie("retakes_loadout_full_sidearm", "Retakes full-buy sidearm loadout", CookieAccess_Private);
     g_LoadoutPromptCookie = RegClientCookie("retakes_loadout_prompted", "Retakes loadout prompt has been shown", CookieAccess_Private);
+    g_LegacyM4ChoiceCookie = RegClientCookie("retakes_m4choice", "Legacy retakes M4A1-S fallback preference", CookieAccess_Private);
 
     AutoExecConfig(true, "retakes_buyphases");
 
@@ -282,14 +294,20 @@ public void Retakes_OnWeaponsAllocated(ArrayList tPlayers, ArrayList ctPlayers, 
 {
     UpdateCurrentPhase();
 
+    bool awpsAvailable = AreAwpsAvailableThisRound();
+    int tAwper = SelectTeamAwper(tPlayers, CS_TEAM_T, awpsAvailable);
+    int ctAwper = SelectTeamAwper(ctPlayers, CS_TEAM_CT, awpsAvailable);
+
     for (int i = 0; i < tPlayers.Length; i++)
     {
-        AssignLoadout(tPlayers.Get(i), CS_TEAM_T);
+        int client = tPlayers.Get(i);
+        AssignLoadout(client, CS_TEAM_T, client == tAwper);
     }
 
     for (int i = 0; i < ctPlayers.Length; i++)
     {
-        AssignLoadout(ctPlayers.Get(i), CS_TEAM_CT);
+        int client = ctPlayers.Get(i);
+        AssignLoadout(client, CS_TEAM_CT, client == ctAwper);
     }
 }
 
@@ -385,7 +403,7 @@ public Action Event_BombDefused(Event event, const char[] name, bool dontBroadca
     return Plugin_Continue;
 }
 
-void AssignLoadout(int client, int team)
+void AssignLoadout(int client, int team, bool allowAwp)
 {
     if (!IsTrackedClient(client))
     {
@@ -418,7 +436,7 @@ void AssignLoadout(int client, int team)
         }
         default:
         {
-            GetFullPrimaryWeapon(team, g_FullPrimaryChoice[client], primary, sizeof(primary));
+            GetFullPrimaryWeapon(team, client, g_FullPrimaryChoice[client], allowAwp, primary, sizeof(primary));
             GetPistolWeapon(team, g_FullSidearmChoice[client], secondary, sizeof(secondary));
             helmet = true;
             kit = team == CS_TEAM_CT;
@@ -926,9 +944,15 @@ void GetForceWeapon(int team, ForceChoice choice, char[] weapon, int maxlen)
     }
 }
 
-void GetFullPrimaryWeapon(int team, FullPrimaryChoice choice, char[] weapon, int maxlen)
+void GetFullPrimaryWeapon(int team, int client, FullPrimaryChoice choice, bool allowAwp, char[] weapon, int maxlen)
 {
     choice = GetTeamFullPrimaryChoice(team, choice);
+
+    if (choice == FullPrimary_AWP && !allowAwp)
+    {
+        GetTeamRifleFallbackWeapon(team, client, weapon, maxlen);
+        return;
+    }
 
     switch (choice)
     {
@@ -955,6 +979,17 @@ void GetFullPrimaryWeapon(int team, FullPrimaryChoice choice, char[] weapon, int
         case FullPrimary_M249: strcopy(weapon, maxlen, "weapon_m249");
         default: strcopy(weapon, maxlen, team == CS_TEAM_CT ? "weapon_m4a1" : "weapon_ak47");
     }
+}
+
+void GetTeamRifleFallbackWeapon(int team, int client, char[] weapon, int maxlen)
+{
+    if (team == CS_TEAM_CT)
+    {
+        strcopy(weapon, maxlen, ShouldUseSilencedM4Fallback(client) ? "weapon_m4a1_silencer" : "weapon_m4a1");
+        return;
+    }
+
+    strcopy(weapon, maxlen, "weapon_ak47");
 }
 
 void GetCurrentLoadoutNames(int client, char[] primary, int primaryMaxLen, char[] secondary, int secondaryMaxLen)
@@ -1062,6 +1097,98 @@ void UpdateCurrentPhase()
     {
         g_CurrentPhase = BuyPhase_Full;
     }
+}
+
+bool AreAwpsAvailableThisRound()
+{
+    if (g_CurrentPhase != BuyPhase_Full)
+    {
+        return false;
+    }
+
+    int fullBuyRound = GetCurrentFullBuyRound();
+    if (fullBuyRound <= 0)
+    {
+        return false;
+    }
+
+    int cycleLength = ClampInt(g_AwpCycleLengthCvar.IntValue, 1, MAX_AWP_CYCLE_LENGTH);
+    int enabledRounds = ClampInt(g_AwpCycleEnabledRoundsCvar.IntValue, 0, cycleLength);
+    int cycleBlock = (fullBuyRound - 1) / cycleLength;
+
+    if (cycleBlock != g_AwpCycleBlock || cycleLength != g_AwpCycleLength || enabledRounds != g_AwpCycleEnabledRounds)
+    {
+        GenerateAwpCycle(cycleBlock, cycleLength, enabledRounds);
+    }
+
+    int cycleSlot = (fullBuyRound - 1) % cycleLength;
+    return g_AwpCycle[cycleSlot];
+}
+
+int GetCurrentFullBuyRound()
+{
+    int currentRound = Retakes_GetRetakeRoundsPlayed() + 1;
+    int firstFullBuyRound = g_PistolRoundsCvar.IntValue + g_ForceRoundsCvar.IntValue + 1;
+
+    return currentRound - firstFullBuyRound + 1;
+}
+
+void GenerateAwpCycle(int cycleBlock, int cycleLength, int enabledRounds)
+{
+    g_AwpCycleBlock = cycleBlock;
+    g_AwpCycleLength = cycleLength;
+    g_AwpCycleEnabledRounds = enabledRounds;
+
+    for (int i = 0; i < MAX_AWP_CYCLE_LENGTH; i++)
+    {
+        g_AwpCycle[i] = i < enabledRounds;
+    }
+
+    for (int i = cycleLength - 1; i > 0; i--)
+    {
+        int swapIndex = GetRandomInt(0, i);
+        bool value = g_AwpCycle[i];
+        g_AwpCycle[i] = g_AwpCycle[swapIndex];
+        g_AwpCycle[swapIndex] = value;
+    }
+}
+
+int SelectTeamAwper(ArrayList players, int team, bool awpsAvailable)
+{
+    if (!awpsAvailable || g_CurrentPhase != BuyPhase_Full)
+    {
+        return 0;
+    }
+
+    int selectedClient = 0;
+    int eligibleCount = 0;
+
+    for (int i = 0; i < players.Length; i++)
+    {
+        int client = players.Get(i);
+        if (!IsTrackedClient(client) || GetTeamFullPrimaryChoice(team, g_FullPrimaryChoice[client]) != FullPrimary_AWP)
+        {
+            continue;
+        }
+
+        eligibleCount++;
+        if (GetRandomInt(1, eligibleCount) == 1)
+        {
+            selectedClient = client;
+        }
+    }
+
+    return selectedClient;
+}
+
+bool ShouldUseSilencedM4Fallback(int client)
+{
+    if (!AreClientCookiesCached(client) || !CookieHasValue(client, g_LegacyM4ChoiceCookie))
+    {
+        return true;
+    }
+
+    return GetCookieInt(client, g_LegacyM4ChoiceCookie) != 0;
 }
 
 void ApplyBuyCvars()
