@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile all plugins
+        run: |
+          cd csgo/addons/sourcemod/scripting
+          chmod +x spcomp64
+          FAILED=0
+          for src in *.sp; do
+            echo "::group::Compiling $src"
+            if ./spcomp64 -iinclude "$src" -ocompiled/$(basename "$src" .sp).smx; then
+              echo "OK"
+            else
+              echo "::error::Compilation failed: $src"
+              FAILED=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $FAILED
+
+      - name: Upload compiled plugins
+        uses: actions/upload-artifact@v4
+        with:
+          name: compiled-plugins
+          path: csgo/addons/sourcemod/scripting/compiled/*.smx

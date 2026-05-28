@@ -1,0 +1,17 @@
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: 162.55.52.132
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: /root/deploy-csgo-retakes.sh
