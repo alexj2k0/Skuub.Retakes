@@ -67,9 +67,9 @@ CFG_CHANGED=$(echo "$CHANGED" | grep '\.cfg$' || true)
 if [ -n "$SMX_CHANGED" ]; then
   echo "=== Reloading changed plugins ==="
   python3 "$REPO_ROOT/scripts/rcon.py" "sm plugins refresh"
-fi
-
-if [ -n "$CFG_CHANGED" ]; then
+  # sm plugins refresh triggers a map restart, which re-executes server.cfg.
+  # Don't send exec server.cfg separately - server is restarting.
+elif [ -n "$CFG_CHANGED" ]; then
   echo "=== Reloading configs ==="
   python3 "$REPO_ROOT/scripts/rcon.py" "exec server.cfg"
 fi
