@@ -1,0 +1,71 @@
+# Game binaries
+/srcds_linux
+/srcds.exe
+/bin/
+/platform/
+/chrome.pak
+/thirdpartylegalnotices.doc
+
+# Steam
+/steamapps/
+/steam_appid.txt
+
+# VPK game assets (~25GB)
+*.vpk
+
+# Maps (~5.6GB)
+/csgo/maps/
+
+# Standard game content
+/csgo/bin/
+/csgo/materials/
+/csgo/models/
+/csgo/resource/
+/csgo/scenes/
+/csgo/scripts/
+/csgo/expressions/
+/csgo/panorama/
+
+# Cache files
+*.cache
+/csgo/shader_cache.cfg
+
+# Logs
+/csgo/logs/
+/csgo/addons/sourcemod/logs/
+
+# Backup files
+/csgo/backup_round*.txt
+
+# Round backup files in root (if any)
+/backup_round*.txt
+
+# Plugin/directory backups
+*.bak-*
+
+# Python
+__pycache__/
+
+# IDE / editor
+.selected_editor
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Runtime data (client prefs, SQLite DBs, admin cache)
+/csgo/addons/sourcemod/data/
+
+# GeoIP database (download separately from MaxMind)
+/csgo/addons/sourcemod/configs/geoip/
+
+# Runtime files
+/csgo/stats.txt
+/csgo/ugc_collection_cache.txt
+/csgo/soundcache/
+/csgo/soundcache_manifest.txt
+
+# Sensitive / private configs (GSLT token, RCON password)
+/csgo/cfg/private/
+/discord_webhook_url
+/srcds.out

@@ -1,0 +1,8 @@
+"Phrases"
+{
+    "NoAccess"
+    {
+        "#format"       "{1:s}"
+        "en"            "You do not have access to this command."
+    }
+}

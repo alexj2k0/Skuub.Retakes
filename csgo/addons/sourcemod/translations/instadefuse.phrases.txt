@@ -1,0 +1,32 @@
+"Phrases"
+{
+    "InstaDefuseUnsuccessful"
+    {
+        "#format"	"{1:s},{2:N},{3:.2f}"
+        "en"		"{1} {2} was {3}s away from defusing."
+    }
+    
+    "LiveNadeSomewhere"
+    {
+        "#format"    "{1:s}"
+        "en"        "{1} There is an active grenade somewhere."
+    }
+    
+    "MolotovTooClose"
+    {
+        "#format"    "{1:s}"
+        "en"        "{1} There is a molotov close to the bomb."
+    }
+    
+    "InstaDefuseSuccessful"
+    {
+        "#format"    "{1:s},{2:N},{3:.2f}"
+        "en"        "{1} {2} defused with {3}s remaining!"
+    }
+	
+    "TeammateHasDefuseKit"
+    {
+        "#format"    "{1:s}"
+        "en"        "{1} You have no time! Your teammate has a Defuse Kit!"
+    }
+}
