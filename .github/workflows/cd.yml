@@ -15,3 +15,12 @@ jobs:
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: /root/deploy-csgo-retakes.sh
+
+      - name: Notify Discord
+        if: always()
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          title: CD deploy
+          description: "${{ job.status == 'success' && 'Deployed to VPS and server restarted' || 'Deploy failed' }}"
+          color: ${{ job.status == 'success' && 0x00ff00 || 0xff0000 }}
