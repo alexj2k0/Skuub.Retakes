@@ -79,6 +79,7 @@ public void AdminMenu_Map(TopMenu topmenu,
 	}
 	else if (action == TopMenuAction_SelectOption)
 	{
+		LoadMapList(g_MapList);
 		g_MapList.Display(param, MENU_TIME_FOREVER);
 	}
 }
@@ -89,6 +90,7 @@ public Action Command_Map(int client, int args)
 	{
 		if ((GetCmdReplySource() == SM_REPLY_TO_CHAT) && (client != 0))
 		{
+			LoadMapList(g_MapList);
 			g_MapList.SetTitle("%T", "Choose Map", client);
 			g_MapList.Display(client, MENU_TIME_FOREVER);
 		}
@@ -135,14 +137,23 @@ public Action Timer_ChangeMap(Handle timer, DataPack dp)
 
 Handle g_map_array = null;
 int g_map_serial = -1;
+char g_map_list_name[32];
 
 int LoadMapList(Menu menu)
 {
 	Handle map_array;
-	
+	char mapListName[32];
+	strcopy(mapListName, sizeof(mapListName), IsMulti1v1ModeActive() ? "sm_map onevone menu" : "sm_map menu");
+
+	if (!StrEqual(g_map_list_name, mapListName))
+	{
+		g_map_serial = -1;
+		strcopy(g_map_list_name, sizeof(g_map_list_name), mapListName);
+	}
+
 	if ((map_array = ReadMapList(g_map_array,
 			g_map_serial,
-			"sm_map menu",
+			mapListName,
 			MAPLIST_FLAG_CLEARARRAY|MAPLIST_FLAG_MAPSFOLDER))
 		!= null)
 	{
@@ -166,6 +177,12 @@ int LoadMapList(Menu menu)
 		GetMapDisplayName(map_name, displayName, sizeof(displayName));
 		menu.AddItem(map_name, displayName);
 	}
-	
+
 	return map_count;
+}
+
+bool IsMulti1v1ModeActive()
+{
+	ConVar multi1v1Enabled = FindConVar("sm_multi1v1_enabled");
+	return multi1v1Enabled != null && multi1v1Enabled.BoolValue;
 }
