@@ -73,6 +73,7 @@ public void OnPluginStart()
     HookEvent("player_spawn", Event_PlayerSpawn);
 
     RegConsoleCmd("sm_tpmenu", Command_CheckpointMenu);
+    RegConsoleCmd("sm_menu", Command_CheckpointMenu);
     RegConsoleCmd("sm_mode", Command_ModeMenu);
     RegConsoleCmd("sm_solo", Command_MovementMapMenu);
     RegConsoleCmd("sm_movement", Command_MovementMapMenu);
@@ -156,7 +157,6 @@ public void OnClientPutInServer(int client)
 {
     if (!IsFakeClient(client))
     {
-        ResetCheckpoints(client);
         SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamage);
         if (g_MovementMode && IsCurrentSoloMap())
         {
@@ -171,7 +171,6 @@ public void OnClientDisconnect(int client)
 {
     if (!IsFakeClient(client))
     {
-        ResetCheckpoints(client);
         QueuePlayerCheck();
     }
 }
@@ -210,7 +209,15 @@ public Action Event_PlayerSpawn(Event event, const char[] name, bool dontBroadca
 
     ApplyMovementCollision(client);
     SetEntProp(client, Prop_Data, "m_takedamage", 0);
-    CreateTimer(0.1, Timer_SaveStartPosition, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
+
+    if (g_CheckpointCount[client] > 0)
+    {
+        CreateTimer(0.1, Timer_RestoreCheckpoint, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
+    }
+    else
+    {
+        CreateTimer(0.1, Timer_SaveStartPosition, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
+    }
 
     return Plugin_Continue;
 }
@@ -266,6 +273,24 @@ public Action Timer_SaveStartPosition(Handle timer, int userid)
     GetClientAbsOrigin(client, g_StartOrigin[client]);
     GetClientEyeAngles(client, g_StartAngles[client]);
     g_HasStartPosition[client] = true;
+
+    return Plugin_Stop;
+}
+
+public Action Timer_RestoreCheckpoint(Handle timer, int userid)
+{
+    int client = GetClientOfUserId(userid);
+    if (!IsHumanInGame(client) || !IsPlayerAlive(client) || !IsCurrentSoloMap())
+    {
+        return Plugin_Stop;
+    }
+
+    if (g_CheckpointCount[client] > 0)
+    {
+        TeleportToCheckpoint(client);
+        PrintToChat(client, "[KZ] Returned to your last checkpoint (%d/%d).",
+            GetDisplayCheckpoint(client), g_CheckpointCount[client]);
+    }
 
     return Plugin_Stop;
 }
@@ -866,7 +891,7 @@ void TeleportToCheckpoint(int client)
 {
     if (g_CheckpointCount[client] <= 0)
     {
-        PrintToChat(client, "[KZ] No checkpoints saved. Use !cp first.");
+        PrintToChat(client, "[KZ] No checkpoints saved. Use !menu first.");
         return;
     }
 
@@ -894,7 +919,7 @@ void SelectCheckpoint(int client, int direction)
 {
     if (g_CheckpointCount[client] <= 0)
     {
-        PrintToChat(client, "[KZ] No checkpoints saved. Use !cp first.");
+        PrintToChat(client, "[KZ] No checkpoints saved. Use !menu first.");
         return;
     }
 
