@@ -26,7 +26,7 @@ public Plugin myinfo =
     name = "Retakes Solo Warmup",
     author = "OpenAI",
     description = "Uses movement mode by default with a player-selected retakes mode.",
-    version = "1.5.0",
+    version = "1.6.0",
     url = ""
 };
 
@@ -50,6 +50,11 @@ float g_CheckpointOrigin[MAXPLAYERS + 1][MAX_CHECKPOINTS][3];
 float g_CheckpointAngles[MAXPLAYERS + 1][MAX_CHECKPOINTS][3];
 int g_CheckpointCount[MAXPLAYERS + 1];
 int g_CurrentCheckpoint[MAXPLAYERS + 1];
+
+float g_RunStartTime[MAXPLAYERS + 1];
+float g_PersonalBest[MAXPLAYERS + 1];
+bool g_RunActive[MAXPLAYERS + 1];
+bool g_AutoBhop[MAXPLAYERS + 1];
 
 ConVar g_SoloMapCvar;
 ConVar g_SoloMapsCvar;
@@ -79,6 +84,8 @@ public void OnPluginStart()
     RegConsoleCmd("sm_movement", Command_MovementMapMenu);
     RegConsoleCmd("sm_1v1", Command_OneVOneMapMenu);
     RegConsoleCmd("sm_onevone", Command_OneVOneMapMenu);
+    RegConsoleCmd("sm_finish", Command_FinishRun);
+    RegConsoleCmd("sm_bhop", Command_ToggleAutoBhop);
 
     CreateTimer(2.0, Timer_CheckPlayers, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
     CreateTimer(0.2, Timer_UpdateHud, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
@@ -309,10 +316,70 @@ public Action Timer_UpdateHud(Handle timer)
             continue;
         }
 
+        // Auto-start timer when player moves from spawn
+        if (!g_RunActive[client] && g_HasStartPosition[client] && IsPlayerAlive(client))
+        {
+            float origin[3];
+            GetClientAbsOrigin(client, origin);
+            float dist = GetVectorDistance(origin, g_StartOrigin[client]);
+            if (dist > 64.0)
+            {
+                StartRun(client);
+            }
+        }
+
         ShowKzHud(client);
     }
 
     return Plugin_Continue;
+}
+
+void StartRun(int client)
+{
+    g_RunStartTime[client] = GetGameTime();
+    g_RunActive[client] = true;
+    PrintToChat(client, "[KZ] Timer started.");
+}
+
+void StopRun(int client, bool finished)
+{
+    if (!g_RunActive[client])
+        return;
+
+    float elapsed = GetGameTime() - g_RunStartTime[client];
+    g_RunActive[client] = false;
+
+    if (!finished)
+        return;
+
+    int minutes = RoundToFloor(elapsed / 60.0);
+    float seconds = elapsed - (minutes * 60);
+
+    if (g_PersonalBest[client] <= 0.0 || elapsed < g_PersonalBest[client])
+    {
+        float oldPb = g_PersonalBest[client];
+        g_PersonalBest[client] = elapsed;
+
+        if (oldPb > 0.0)
+        {
+            int oldMin = RoundToFloor(oldPb / 60.0);
+            float oldSec = oldPb - (oldMin * 60);
+            PrintToChat(client, "[KZ] NEW PB! %dm %.2fs (was %dm %.2fs)",
+                minutes, seconds, oldMin, oldSec);
+        }
+        else
+        {
+            PrintToChat(client, "[KZ] Run finished: %dm %.2fs (new PB!)", minutes, seconds);
+        }
+        PrintCenterText(client, "PB: %dm %.2fs", minutes, seconds);
+    }
+    else
+    {
+        PrintToChat(client, "[KZ] Run finished: %dm %.2fs | PB: %dm %.2fs",
+            minutes, seconds,
+            RoundToFloor(g_PersonalBest[client] / 60.0),
+            g_PersonalBest[client] - (RoundToFloor(g_PersonalBest[client] / 60.0) * 60));
+    }
 }
 
 public Action Timer_RetakeCountdown(Handle timer)
@@ -637,6 +704,8 @@ void QueuePlayerCheck()
 
 void RestartRun(int client)
 {
+    StopRun(client, false);
+
     if (g_HasStartPosition[client] && IsPlayerAlive(client))
     {
         SaveUndoPosition(client);
@@ -941,20 +1010,23 @@ bool CanUseKzCommand(int client)
     return IsHumanInGame(client) && IsCurrentSoloMap();
 }
 
-void ResetAllCheckpoints()
-{
-    for (int client = 1; client <= MaxClients; client++)
-    {
-        ResetCheckpoints(client);
-    }
-}
-
 void ResetCheckpoints(int client)
 {
     g_CheckpointCount[client] = 0;
     g_CurrentCheckpoint[client] = -1;
     g_HasUndoPosition[client] = false;
     g_Paused[client] = false;
+    g_RunActive[client] = false;
+    g_HasStartPosition[client] = false;
+}
+
+void ResetAllCheckpoints()
+{
+    for (int client = 1; client <= MaxClients; client++)
+    {
+        ResetCheckpoints(client);
+        g_PersonalBest[client] = 0.0;
+    }
 }
 
 void CopyVector(float source[3], float dest[3])
@@ -973,7 +1045,30 @@ void ShowKzHud(int client)
 
     char tier[32];
     GetVelocityTier(speed, tier, sizeof(tier));
-    PrintHintText(client, "Velocity %.0f | %s", speed, tier);
+
+    if (g_RunActive[client])
+    {
+        float elapsed = GetGameTime() - g_RunStartTime[client];
+        int minutes = RoundToFloor(elapsed / 60.0);
+        float seconds = elapsed - (minutes * 60);
+
+        if (g_PersonalBest[client] > 0.0)
+        {
+            int pbMin = RoundToFloor(g_PersonalBest[client] / 60.0);
+            float pbSec = g_PersonalBest[client] - (pbMin * 60);
+            PrintHintText(client, "%.0f u/s | %dm %.2fs | PB %dm %.2fs",
+                speed, minutes, seconds, pbMin, pbSec);
+        }
+        else
+        {
+            PrintHintText(client, "%.0f u/s | %dm %.2fs | PB --",
+                speed, minutes, seconds);
+        }
+    }
+    else
+    {
+        PrintHintText(client, "%.0f u/s | %s", speed, tier);
+    }
 }
 
 void UpdateWarmupState()
@@ -1830,6 +1925,54 @@ void GetMovementMapLabel(const char[] map, char[] label, int maxlen)
     {
         strcopy(label, maxlen, "KZ: Beginner Block");
     }
+    else if (StrEqual(map, "kz_breezeblocks", false))
+    {
+        strcopy(label, maxlen, "KZ: Breezeblocks");
+    }
+    else if (StrEqual(map, "kz_galaxy_go2", false))
+    {
+        strcopy(label, maxlen, "KZ: Galaxy");
+    }
+    else if (StrEqual(map, "kz_hillside", false))
+    {
+        strcopy(label, maxlen, "KZ: Hillside");
+    }
+    else if (StrEqual(map, "kz_lego", false))
+    {
+        strcopy(label, maxlen, "KZ: Lego");
+    }
+    else if (StrEqual(map, "kz_paradise", false))
+    {
+        strcopy(label, maxlen, "KZ: Paradise");
+    }
+    else if (StrEqual(map, "kz_summercliff2_go", false))
+    {
+        strcopy(label, maxlen, "KZ: Summercliff");
+    }
+    else if (StrEqual(map, "kz_woodstock_v2", false))
+    {
+        strcopy(label, maxlen, "KZ: Woodstock");
+    }
+    else if (StrEqual(map, "kz_redemption_csgo", false))
+    {
+        strcopy(label, maxlen, "KZ: Redemption");
+    }
+    else if (StrEqual(map, "kz_minimal_combo", false))
+    {
+        strcopy(label, maxlen, "KZ: Minimal Combo");
+    }
+    else if (StrEqual(map, "kz_sandstone_mq", false))
+    {
+        strcopy(label, maxlen, "KZ: Sandstone");
+    }
+    else if (StrEqual(map, "kz_pollution", false))
+    {
+        strcopy(label, maxlen, "KZ: Pollution");
+    }
+    else if (StrEqual(map, "kz_unity_collab", false))
+    {
+        strcopy(label, maxlen, "KZ: Unity Collab");
+    }
     else
     {
         strcopy(label, maxlen, map);
@@ -1858,4 +2001,51 @@ void GetOneVOneMapLabel(const char[] map, char[] label, int maxlen)
     {
         strcopy(label, maxlen, map);
     }
+}
+
+public Action Command_FinishRun(int client, int args)
+{
+    if (!IsHumanInGame(client) || !IsCurrentSoloMap())
+    {
+        return Plugin_Handled;
+    }
+
+    if (!g_RunActive[client])
+    {
+        PrintToChat(client, "[KZ] No run in progress. Start moving from spawn to start the timer.");
+        return Plugin_Handled;
+    }
+
+    StopRun(client, true);
+    return Plugin_Handled;
+}
+
+public Action Command_ToggleAutoBhop(int client, int args)
+{
+    if (!IsHumanInGame(client))
+    {
+        return Plugin_Handled;
+    }
+
+    g_AutoBhop[client] = !g_AutoBhop[client];
+    PrintToChat(client, "[Movement] Auto-bhop %s.", g_AutoBhop[client] ? "ON" : "OFF");
+    return Plugin_Handled;
+}
+
+public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3], float angles[3], int &weapon, int &subtype, int &cmdnum, int &tickcount, int &seed, int mouse[2])
+{
+    if (!g_AutoBhop[client] || !IsPlayerAlive(client) || !IsCurrentSoloMap())
+    {
+        return Plugin_Continue;
+    }
+
+    if (buttons & IN_JUMP)
+    {
+        if (!(GetEntityFlags(client) & FL_ONGROUND))
+        {
+            buttons &= ~IN_JUMP;
+        }
+    }
+
+    return Plugin_Continue;
 }
