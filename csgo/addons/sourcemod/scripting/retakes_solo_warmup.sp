@@ -26,7 +26,7 @@ public Plugin myinfo =
     name = "Retakes Solo Warmup",
     author = "OpenAI",
     description = "Uses movement mode by default with a player-selected retakes mode.",
-    version = "1.6.0",
+    version = "1.6.1",
     url = ""
 };
 
@@ -86,6 +86,8 @@ public void OnPluginStart()
     RegConsoleCmd("sm_onevone", Command_OneVOneMapMenu);
     RegConsoleCmd("sm_finish", Command_FinishRun);
     RegConsoleCmd("sm_bhop", Command_ToggleAutoBhop);
+    RegConsoleCmd("sm_maps", Command_Maps);
+    RegConsoleCmd("sm_rtv", Command_Rtv);
 
     CreateTimer(2.0, Timer_CheckPlayers, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
     CreateTimer(0.2, Timer_UpdateHud, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
@@ -2048,4 +2050,138 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
     }
 
     return Plugin_Continue;
+}
+
+public Action Command_Maps(int client, int args)
+{
+    if (!IsHumanInGame(client))
+    {
+        return Plugin_Handled;
+    }
+
+    if (g_MovementMode)
+    {
+        OpenMovementMapMenu(client);
+    }
+    else if (g_OneVOneMode)
+    {
+        OpenOneVOneMapMenu(client);
+    }
+    else
+    {
+        FakeClientCommand(client, "say /nominate");
+    }
+
+    return Plugin_Handled;
+}
+
+public Action Command_Rtv(int client, int args)
+{
+    if (!IsHumanInGame(client))
+    {
+        return Plugin_Handled;
+    }
+
+    if (!g_MovementMode && !g_OneVOneMode)
+    {
+        FakeClientCommand(client, "say /rtv");
+        return Plugin_Handled;
+    }
+
+    StartModeMapVote();
+    return Plugin_Handled;
+}
+
+void StartModeMapVote()
+{
+    ArrayList maps = new ArrayList(ByteCountToCells(PLATFORM_MAX_PATH));
+
+    if (g_MovementMode)
+    {
+        BuildSoloMapList(maps);
+    }
+    else if (g_OneVOneMode)
+    {
+        BuildOneVOneMapList(maps);
+    }
+
+    if (maps.Length <= 0)
+    {
+        delete maps;
+        PrintToChatAll("[SM] No maps available for the current mode.");
+        return;
+    }
+
+    char currentMap[PLATFORM_MAX_PATH];
+    GetCurrentMap(currentMap, sizeof(currentMap));
+
+    Menu menu = new Menu(MapVoteHandler);
+    menu.SetTitle(g_MovementMode ? "Vote Movement Map" : "Vote 1v1 Map");
+
+    char map[PLATFORM_MAX_PATH];
+    char label[96];
+    for (int i = 0; i < maps.Length; i++)
+    {
+        maps.GetString(i, map, sizeof(map));
+        if (!IsMapValid(map))
+        {
+            continue;
+        }
+
+        if (g_MovementMode)
+        {
+            GetMovementMapLabel(map, label, sizeof(label));
+        }
+        else
+        {
+            GetOneVOneMapLabel(map, label, sizeof(label));
+        }
+
+        if (StrEqual(currentMap, map, false))
+        {
+            Format(label, sizeof(label), "%s (current)", label);
+        }
+
+        menu.AddItem(map, label);
+    }
+
+    delete maps;
+
+    if (menu.ItemCount <= 0)
+    {
+        delete menu;
+        PrintToChatAll("[SM] No valid maps available for the current mode.");
+        return;
+    }
+
+    menu.DisplayVoteToAll(20);
+    PrintToChatAll("[SM] Map vote started. Vote with !rtv or escape menu.");
+}
+
+public int MapVoteHandler(Menu menu, MenuAction action, int param1, int param2)
+{
+    if (action == MenuAction_End)
+    {
+        delete menu;
+    }
+    else if (action == MenuAction_VoteEnd)
+    {
+        char map[PLATFORM_MAX_PATH];
+        menu.GetItem(param1, map, sizeof(map));
+
+        if (IsMapValid(map))
+        {
+            PrintToChatAll("[SM] Map vote winner: %s. Changing map...", map);
+            if (g_MovementMode)
+            {
+                ChangeToMovementMap(map);
+            }
+            else if (g_OneVOneMode)
+            {
+                ChangeToOneVOneMap(map);
+            }
+        }
+    }
+
+    return 0;
 }
