@@ -1,5 +1,6 @@
 #include <sourcemod>
 #include <sdktools>
+#include <sdkhooks>
 #include <cstrike>
 
 #pragma semicolon 1
@@ -156,6 +157,7 @@ public void OnClientPutInServer(int client)
     if (!IsFakeClient(client))
     {
         ResetCheckpoints(client);
+        SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamage);
         if (g_MovementMode && IsCurrentSoloMap())
         {
             CreateTimer(0.5, Timer_PrepareSoloPlayers, _, TIMER_FLAG_NO_MAPCHANGE);
@@ -172,6 +174,17 @@ public void OnClientDisconnect(int client)
         ResetCheckpoints(client);
         QueuePlayerCheck();
     }
+}
+
+public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
+{
+    if (IsCurrentSoloMap())
+    {
+        damage = 0.0;
+        return Plugin_Changed;
+    }
+
+    return Plugin_Continue;
 }
 
 public Action Event_CheckPlayers(Event event, const char[] name, bool dontBroadcast)
@@ -191,10 +204,12 @@ public Action Event_PlayerSpawn(Event event, const char[] name, bool dontBroadca
     if (!IsCurrentSoloMap())
     {
         ApplyRetakesCollision(client);
+        SetEntProp(client, Prop_Data, "m_takedamage", 2);
         return Plugin_Continue;
     }
 
     ApplyMovementCollision(client);
+    SetEntProp(client, Prop_Data, "m_takedamage", 0);
     CreateTimer(0.1, Timer_SaveStartPosition, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
 
     return Plugin_Continue;
