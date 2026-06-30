@@ -720,6 +720,8 @@ void QueuePlayerCheck()
 void RestartRun(int client)
 {
     StopRun(client, false);
+    g_CheckpointCount[client] = 0;
+    g_CurrentCheckpoint[client] = -1;
 
     if (g_HasStartPosition[client] && IsPlayerAlive(client))
     {
