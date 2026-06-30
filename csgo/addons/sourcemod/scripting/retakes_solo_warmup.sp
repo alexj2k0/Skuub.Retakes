@@ -55,6 +55,7 @@ float g_RunStartTime[MAXPLAYERS + 1];
 float g_PersonalBest[MAXPLAYERS + 1];
 bool g_RunActive[MAXPLAYERS + 1];
 bool g_AutoBhop[MAXPLAYERS + 1];
+float g_DisconnectTime[MAXPLAYERS + 1];
 
 ConVar g_SoloMapCvar;
 ConVar g_SoloMapsCvar;
@@ -166,6 +167,17 @@ public void OnClientPutInServer(int client)
 {
     if (!IsFakeClient(client))
     {
+        // Reset KZ run if player was gone >5 min
+        if (g_DisconnectTime[client] > 0.0 && g_RunActive[client])
+        {
+            float goneTime = GetGameTime() - g_DisconnectTime[client];
+            if (goneTime > 300.0)
+            {
+                StopRun(client, false);
+            }
+        }
+        g_DisconnectTime[client] = 0.0;
+
         SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamage);
         if (g_MovementMode && IsCurrentSoloMap())
         {
@@ -180,6 +192,7 @@ public void OnClientDisconnect(int client)
 {
     if (!IsFakeClient(client))
     {
+        g_DisconnectTime[client] = GetGameTime();
         QueuePlayerCheck();
     }
 }
