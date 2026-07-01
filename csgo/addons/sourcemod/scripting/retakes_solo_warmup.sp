@@ -1187,6 +1187,7 @@ void ApplySoloWarmupSettings()
     ServerCommand("sv_staminajumpcost 0");
     ServerCommand("sv_staminalandcost 0");
     ServerCommand("sv_maxvelocity 3500");
+    ServerCommand("sv_clamp_unsafe_velocities 0");
     ServerCommand("mp_solid_teammates 0");
 
     for (int client = 1; client <= MaxClients; client++)
